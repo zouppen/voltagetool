@@ -1,0 +1,32 @@
+Data dumper for DCDC USB power supply unit
+==========================================
+
+Device description: 
+
+http://www.mini-box.com/DCDC-USB?sc=8&category=981
+
+License
+-------
+
+GNU GPL version 2 or (at your option) later. COPYING missing at the moment. :-)
+
+Usage
+-----
+
+./make.sh
+sudo a.out
+
+TODO
+----
+
+A working tool. This is a piece of crappiness.
+
+Thanks
+------
+
+Idea and some code I got from:
+
+http://www.ros.org/wiki/minibox_dcdc
+
+Thank you ROS. I'd like to see you to do Linux kernel driver for
+it. But I may do it some day if I've got enough time.

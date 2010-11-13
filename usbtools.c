@@ -82,6 +82,7 @@ static const float SAMPLE_RATE = 5.0; // in Hz
 #define DCDC_SUCCESS 0
 #define DCDC_NO_DEVICE 1
 #define DCDC_DETACH_ERROR 2
+#define DCDC_DUMP_ERROR 3
 
 struct dcdc_cfg {
 	int debug;
@@ -187,7 +188,7 @@ void dcdc_stop(struct dcdc_cfg *cfg)
       if (cfg->debug) warnx("close complete");
 }
 
-int send (struct dcdc_cfg *cfg, unsigned char *data, int size)
+int send(struct dcdc_cfg *cfg, unsigned char *data, int size)
 {
 	if (data == NULL)
 		return -1;
@@ -200,7 +201,7 @@ int send (struct dcdc_cfg *cfg, unsigned char *data, int size)
 	return error;
 }
 
-int receive (struct dcdc_cfg *cfg, unsigned char *data, int length, int timeout)
+int receive(struct dcdc_cfg *cfg, unsigned char *data, int length, int timeout)
 {
 	if (data == NULL)
 		return -1;
@@ -261,188 +262,54 @@ int read_status(struct dcdc_cfg *cfg, uint8_t * data)
       return error;
 }
 
-/*
-    ros::NodeHandle handle;
-    int debug_level;
-    volatile bool stopRequest;
-
-    int mode;
-    float input_voltage;
-    float output_voltage;
-
-    void run()
-    {
-      std::stringstream ss;
-
-      //
-      //  Need to make the queue size big enough that each thread can publish without
-      //  concern that one message it quickly replaced by another threads message.
-      //
-      ros::Publisher ps  = handle.advertise<minibox_dcdc::MiniboxDcDc>("minibox_dcdc", 5);
-
-      ros::Rate rate(SAMPLE_RATE);            //set the rate we scan the device for input
-
-      minibox_dcdc::MiniboxDcDc  powerState;
+int dcdc_debugdump(struct dcdc_cfg *cfg)
+{
       uint8_t data[64];
       int error;
 
-      while(handle.ok() && (stopRequest == false))
-      {
-        rate.sleep();
-        ros::spinOnce();
-#if 0
-        count--;
-        if(count == 0)
-        {
-          ROS_INFO("set output=%d", power);
-          //error = send_command(CMD_INC_VOUT, power);
-          //error = send_command(CMD_SET_AUX_WIN, power);
-          //error = send_command(CMD_SET_PW_SWITCH, power);
-          error = send_command(CMD_SET_OUTPUT, power);
-          if (error < 0)
-            ROS_ERROR ("Failed send_command");
-          power ^= 1;
-          count = reload;
-        }
-        else
-#endif
-        {
-          error = get_all_values ();
-          if (error < 0)
-          {
-            ROS_WARN ("get_all_values failed");
-          }
-        }
+      error = get_all_values(cfg);
+      if (error < 0) {
+	      if (cfg->debug) warnx("get_all_values failed");
+      }
 
-        error = read_status (data);
-        if (error < 0)
-          ROS_ERROR ("Failed read_status");
-        else
-        {
+      error = read_status(cfg,data);
+      if (error < 0) {
+	      if (cfg->debug) printf("Failed read_status");
+	      return DCDC_DUMP_ERROR;
+      }
 
-          switch(data[0])
-          {
-            case DCDCUSB_RECV_ALL_VALUES:
-            {
-              mode = data[1];
+      if(data[0] == DCDCUSB_RECV_ALL_VALUES) {
+	      
+              int mode = data[1];
 
-              //stat.add("mode", mode & 0x3);
-              //stat.add("time config", (mode >> 5) & 0x7);
-              //stat.add("voltage config", (mode >> 2) & 0x7);
+	      printf("Mode: %d\n", mode & 0x3);
+	      printf("Time config: %d\n", (mode >> 5) & 0x7);
+	      printf("Voltage config: %d\n", (mode >> 2) & 0x7);
+	      printf("State: %d\n", (int)data[2]); //7=good, 18= 1 minute to off
 
-              //stat.add("state", (int)data[2]); //7=good, 18= 1 minute to off
-              powerState.state = data[2];
-              //printf("state=%02x\n", data[2]);
+              double input_voltage = (double)data[3] * 0.1558f;
+              double ignition_voltage = (double)data[4] * 0.1558f;
+              double output_voltage = (double)data[5] * 0.1170f;
 
-              input_voltage = ((float)data[3] * 0.1558f);
-              //stat.add("input voltage", input_voltage);
-              powerState.input_voltage = input_voltage;
-
-              float voltage = (float)data[4] * 0.1558f;
-              //stat.add("ignition voltage", voltage);
-
-              output_voltage = (float)data[5] * 0.1170f;
-              //stat.add("output voltage", output_voltage);
-              powerState.output_voltage = output_voltage;
+	      printf("Input voltage: %f\n", input_voltage);
+	      printf("Ignition voltage: %f\n", ignition_voltage);
+	      printf("Output voltage: %f\n", output_voltage);
 
               int status = data[6];
-              //stat.add("Power Switch", ((status & 0x4) ? "True":"False"));
-              powerState.power_switch = (status & 0x4);
-              //stat.add("Output Enable", ((status & 0x8) ? "True":"False"));
-              powerState.output_enable = (status & 0x8);
-              //stat.add("AuxVin Enable", ((status & 0x10) ? "True":"False"));
-              powerState.aux_enable = (status & 0x10);
 
-              //ss.str("");
-              //ss << "version " << ((data[23] >> 5) & 0x07) << "." << (data[23] & 0x1F);
-				      //stat.add("version", ss.str());
+	      int power_switch = (status & 0x4);
+	      int output_enable = (status & 0x8);
+	      int auxvin_enable = (status & 0x10);
 
-              //msg_out.status.push_back(stat);
-
-              ROS_DEBUG("mode=%x input_voltage=%.2f ignition_voltage=%.2f output_voltage=%.2f", 
-                mode, input_voltage, voltage, output_voltage );
-            }
-            break;
-            case INTERNAL_MESG:
-            {
-            }
-            break;
-            case DCDCUSB_CMD_IN:
-            {
-              ROS_DEBUG("received CMD_IN");
-              //fprintf(stderr,"%x %x %x %x\n", data[0], data[1], data[2], data[3]);
-
-              double rpot = ((double)data[3]) * CT_RP / (double)257 + CT_RW;
-              double voltage = (double)80 * ( (double)1 + CT_R1/(rpot+CT_R2));
-              voltage = floor(voltage);
-              voltage = voltage/100;
-              //stat.add("voltage", voltage);
-              ROS_DEBUG("vout=%f", voltage);
-              //msg_out.status.push_back(stat);
-            }
-            break;
-            case DCDCUSB_MEM_READ_IN:
-            {
-            }
-            break;
-
-            default:
-              ROS_WARN ("un-recognized message type = %x", data[0]);
-          }
-
-          powerState.header.stamp = ros::Time::now();
-          ps.publish(powerState);
-        }
+	      printf("Power switch: %d\n", power_switch);
+	      printf("Output enable: %d\n", output_enable);
+	      printf("Aux V in enable: %d\n", auxvin_enable);	      
+      } else {
+	      errx(1,"weird packet: %d", data[0]);
       }
-    }
 
-};
-
-int main(int argc, char** argv)
-{
-  int debug_level;
-
-  po::options_description desc("Allowed options");
-  desc.add_options()
-    ("help", "this help message")
-    ("debug", po::value<int>(&debug_level)->default_value(0), "debug level");
-
-  po::variables_map vm;
-  po::store(po::parse_command_line( argc, argv, desc), vm);
-  po::notify(vm);
-
-  if( vm.count("help"))
-  {
-    cout << desc << "\n";
-    return 1;
-  }
-
-  ros::init(argc, argv, "minibox_dcdc");
-  ros::NodeHandle handle;
-  ros::NodeHandle private_handle("~");
-
-  ROSCONSOLE_AUTOINIT;
-  log4cxx::LoggerPtr my_logger = log4cxx::Logger::getLogger(ROSCONSOLE_DEFAULT_NAME);
-  ROS_INFO("Logger Name: %s\n", ROSCONSOLE_DEFAULT_NAME);
-
-  if( my_logger->getLevel() == 0 )    //has anyone set our level??
-  {
-    // Set the ROS logger
-    my_logger->setLevel(ros::console::g_level_lookup[ros::console::levels::Info]);
-  }
-
-  private_handle.getParam( "debug_level", debug_level );
-  ROS_DEBUG("debug_level=%d", debug_level);
-
-  server server_list(debug_level);
-
-  server_list.start();
-
-  ros::spin(); //wait for ros to shut us down
-
-  server_list.stop();
+      return DCDC_SUCCESS;
 }
-*/
 
 int main(int argc, char **argv) {
 
@@ -453,6 +320,8 @@ int main(int argc, char **argv) {
 		printf("hajosi");
 		return 1;
 	}
+
+	dcdc_debugdump(&cfg);
 
 	dcdc_stop(&cfg);
 	return 0;
