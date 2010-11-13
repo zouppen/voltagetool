@@ -2,6 +2,7 @@
 #include <err.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <usb.h>
 
@@ -186,54 +187,45 @@ void dcdc_stop(struct dcdc_cfg *cfg)
       if (cfg->debug) warnx("close complete");
 }
 
-/*
-  private:
+int send (struct dcdc_cfg *cfg, unsigned char *data, int size)
+{
+	if (data == NULL)
+		return -1;
 
-    ros::NodeHandle handle;
-    int debug_level;
-    volatile bool stopRequest;
-    boost::shared_ptr<boost::thread> myThread;
+	int error = usb_interrupt_write (cfg->dev, USB_ENDPOINT_OUT + 1,
+					 (char *) data, size, 1000);
+	if( error != size && cfg->debug )
+		warnx("error on usb_interrupt_write, returned code %d", error);
 
-    int mode;
-    float input_voltage;
-    float output_voltage;
+	return error;
+}
 
-    int send ( unsigned char *data, int size)
-    {
-      if (data == NULL)
-        return -1;
+int receive (struct dcdc_cfg *cfg, unsigned char *data, int length, int timeout)
+{
+	if (data == NULL)
+		return -1;
 
-      int error = usb_interrupt_write (dev, USB_ENDPOINT_OUT + 1, (char *) data, size, 1000);
-      if( error != size)
-        ROS_ERROR ("error on usb_interrupt_write, returned code %d", error);
+	int error = usb_interrupt_read (cfg->dev, USB_ENDPOINT_IN + 1,
+					(char *)data, length, timeout);
+	
+	if ( error != length && cfg->debug )
+		warnx("error on usb_interrupt_read, returned code %d", error);
+	
+	return error;
+}
 
-      return error;
-    }
-
-    int receive ( unsigned char *data, int length, int timeout)
-    {
-      if (data == NULL)
-        return -1;
-
-      int error = usb_interrupt_read (dev, USB_ENDPOINT_IN + 1, (char *) data, length, timeout);
-      if( error != length)
-        ROS_ERROR ("error on usb_interrupt_read, returned code %d", error);
-
-      return error;
-    }
-
-    int get_all_values( )
-    {
+int get_all_values(struct dcdc_cfg *cfg)
+{
       unsigned char packet[3];
 
       packet[0] = DCDCUSB_GET_ALL_VALUES;
       packet[1] = 0;
 
-      return send (packet, 2);
-    }
+      return send(cfg, packet, 2);
+}
 
-    int send_command( uint8_t command, uint8_t value)
-    {
+int send_command(struct dcdc_cfg *cfg, uint8_t command, uint8_t value)
+{
       unsigned char packet[5];
 
       packet[0] = DCDCUSB_CMD_OUT;
@@ -242,11 +234,11 @@ void dcdc_stop(struct dcdc_cfg *cfg)
       packet[3] = 0;
       packet[4] = 0;
 
-      return send (packet, 5);
-    }
+      return send(cfg, packet, 5);
+}
 
-    int read_status (uint8_t * data)
-    {
+int read_status(struct dcdc_cfg *cfg, uint8_t * data)
+{
       unsigned char packet[24];
       int len, i;
       int error;
@@ -254,21 +246,29 @@ void dcdc_stop(struct dcdc_cfg *cfg)
       len = 24;
       memset (packet, 0, len);
       //packet[0] = 0x82;
-      error = receive (packet, len, 1000);
-      if (error < 0)
-      {
-        ROS_WARN ("receive failed");
-        return -1;
+      error = receive(cfg, packet, len, 1000);
+      if (error < 0) {
+	      if ( cfg->debug ) warnx("receive failed");
+	      return -1;
       }
 
       //fprintf(stderr, "length=%d\n", error);
       for (i = 0; i < len; i++)
       {
-        data[i] = packet[i];
+	      data[i] = packet[i];
       }
 
       return error;
-    }
+}
+
+/*
+    ros::NodeHandle handle;
+    int debug_level;
+    volatile bool stopRequest;
+
+    int mode;
+    float input_voltage;
+    float output_voltage;
 
     void run()
     {
