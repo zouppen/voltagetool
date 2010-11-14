@@ -5,6 +5,11 @@ Device description:
 
 http://www.mini-box.com/DCDC-USB?sc=8&category=981
 
+Author
+------
+
+Joel Lehtonen, joel.lehtonen ät iki.fi. Feel free to contact!
+
 License
 -------
 
@@ -13,8 +18,12 @@ GNU GPL version 2 or (at your option) later. COPYING missing at the moment. :-)
 Usage
 -----
 
-./make.sh
-sudo a.out
+$ ./make.sh
+$ sudo ./a.out
+
+To set output voltage (VOUT):
+
+$ sudo ./a.out 13.5
 
 TODO
 ----
@@ -30,3 +39,7 @@ http://www.ros.org/wiki/minibox_dcdc
 
 Thank you ROS. I'd like to see you to do Linux kernel driver for
 it. But I may do it some day if I've got enough time.
+
+Thanks to Minibox for the original Windows sources, too. It would have
+been very tricky to do voltage conversions without the original
+implementation

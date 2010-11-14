@@ -311,6 +311,29 @@ int dcdc_debugdump(struct dcdc_cfg *cfg)
       return DCDC_SUCCESS;
 }
 
+// Does some mysterious conversions (for voltage in, for example).
+uint8_t convert_data(double x) {
+	double rpot = (double)0.8 * CT_R1 / (x - (double)0.8) - CT_R2;
+	double result = (257 * (rpot-CT_RW) / CT_RP);
+
+	if (result<0) result = 0;
+	if (result>255) result = 255;
+
+	return (uint8_t)result;
+}
+
+// TODO This is not throughoutly tested! Beware of hardware roasting!
+int dcdc_set_voltage(struct dcdc_cfg *cfg, double vout) {
+	uint8_t vout_raw = convert_data(vout);
+
+	if (cfg->debug) warnx("Setting voltage byte to %d",vout_raw);
+
+	int ret = send_command(cfg, CMD_WRITE_VOUT, vout_raw);
+	if (ret < 0) printf("raw error: %d\n",ret);
+	return DCDC_SUCCESS;
+}
+
+
 int main(int argc, char **argv) {
 
 	struct dcdc_cfg cfg;
@@ -319,6 +342,17 @@ int main(int argc, char **argv) {
 	if (ret!=DCDC_SUCCESS) {
 		printf("hajosi");
 		return 1;
+	}
+	
+	// Experimental voltage selection if given from cmd line.
+	if (argc==2) {
+		double vout;
+		if (sscanf(argv[1], "%lf", &vout) == 1) {
+			printf("Setting voltage to %f volts.\n", vout);
+			dcdc_set_voltage(&cfg,vout);
+		} else {
+			warnx("Invalid voltage");
+		}
 	}
 
 	dcdc_debugdump(&cfg);
