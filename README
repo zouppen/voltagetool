@@ -36,6 +36,10 @@ To set output voltage (VOUT):
 
 $ sudo ./debugtool 13.5
 
+To monitor voltage, measurement every 10.5 seconds:
+
+$ sudo ./voltagemonitor 10.5
+
 TODO
 ----
 
