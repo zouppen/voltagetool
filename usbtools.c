@@ -6,90 +6,7 @@
 #include <time.h>
 #include <usb.h>
 
-static const float SAMPLE_RATE = 5.0; // in Hz
-
-#define STATUS_OK			0x00
-#define STATUS_ERASE			0x01
-#define STATUS_WRITE			0x02
-#define STATUS_READ			0x03
-#define STATUS_ERROR			0xff
-
-#define DCDCUSB_GET_ALL_VALUES		0x81
-#define DCDCUSB_RECV_ALL_VALUES		0x82
-#define DCDCUSB_CMD_OUT			0xB1
-#define DCDCUSB_CMD_IN			0xB2
-#define DCDCUSB_MEM_READ_OUT		0xA1
-#define DCDCUSB_MEM_READ_IN		0xA2
-#define DCDCUSB_MEM_WRITE_OUT		0xA3
-#define DCDCUSB_MEM_WRITE_IN		0xA4
-#define DCDCUSB_MEM_ERASE		0xA5
-
-#define INTERNAL_MESG			0xFF
-#define INTERNAL_MESG_DISCONNECTED	0x01
-
-#define CMD_SET_AUX_WIN			0x01
-#define CMD_SET_PW_SWITCH		0x02
-#define CMD_SET_OUTPUT			0x03
-#define CMD_WRITE_VOUT			0x06
-#define CMD_READ_VOUT			0x07
-#define CMD_INC_VOUT			0x0C
-#define CMD_DEC_VOUT			0x0D
-#define CMD_LOAD_DEFAULTS		0x0E
-#define CMD_SCRIPT_START		0x10
-#define CMD_SCRIPT_STOP			0x11
-#define CMD_SLEEP			0x12
-
-//For reading out memory
-#define TYPE_CODE_MEMORY		0x00
-#define TYPE_EPROM_EXTERNAL		0x01
-#define TYPE_EPROM_INTERNAL		0x02
-#define TYPE_CODE_SPLASH		0x03
-
-// AddressLo : AddressHi : AddressUp
-// (anywhere inside the 64 byte-block to be erased)
-#define FLASH_REPORT_ERASE_MEMORY	0xF2
-// AddressLo : AddressHi : AddressUp : Data Length (1...32)
-#define FLASH_REPORT_READ_MEMORY	0xF3
-// AddressLo : AddressHi : AddressUp : Data Length (1...32) : Data....
-#define FLASH_REPORT_WRITE_MEMORY	0xF4
-// same as F2 but in keyboard mode
-#define KEYBD_REPORT_ERASE_MEMORY	0xB2
-// same as F3 but in keyboard mode
-#define KEYBD_REPORT_READ_MEMORY	0xB3
-// same as F4 but in keyboard mode
-#define KEYBD_REPORT_WRITE_MEMORY	0xB4
-// response to b3,b4
-#define KEYBD_REPORT_MEMORY		0x41
-
-#define IN_REPORT_EXT_EE_DATA		0x31
-#define OUT_REPORT_EXT_EE_READ		0xA1
-#define OUT_REPORT_EXT_EE_WRITE		0xA2
-
-#define IN_REPORT_INT_EE_DATA		0x32
-#define OUT_REPORT_INT_EE_READ		0xA3
-#define OUT_REPORT_INT_EE_WRITE		0xA4
-
-///// MEASUREMENT CONSTANTS
-#define CT_RW	(double)75
-#define CT_R1	(double)49900
-#define CT_R2	(double)1500
-#define CT_RP	(double)10000
-
-#define CHECK_CHAR (unsigned char)0xAA //used for line/write check 
-
-#define MAX_MESSAGE_CNT 64
-
-#define DCDC_SUCCESS 0
-#define DCDC_NO_DEVICE 1
-#define DCDC_DETACH_ERROR 2
-#define DCDC_DUMP_ERROR 3
-
-struct dcdc_cfg {
-	int debug;
-	int stop_request;
-	usb_dev_handle *dev;
-};
-
+#include "usbtools.h"
 
 int dcdc_init(struct dcdc_cfg *cfg, int debug)
 {
@@ -262,57 +179,9 @@ int read_status(struct dcdc_cfg *cfg, uint8_t * data)
       return error;
 }
 
-int dcdc_debugdump(struct dcdc_cfg *cfg)
-{
-      uint8_t data[64];
-      int error;
-
-      error = get_all_values(cfg);
-      if (error < 0) {
-	      if (cfg->debug) warnx("get_all_values failed");
-      }
-
-      error = read_status(cfg,data);
-      if (error < 0) {
-	      if (cfg->debug) printf("Failed read_status");
-	      return DCDC_DUMP_ERROR;
-      }
-
-      if(data[0] == DCDCUSB_RECV_ALL_VALUES) {
-	      
-              int mode = data[1];
-
-	      printf("Mode: %d\n", mode & 0x3);
-	      printf("Time config: %d\n", (mode >> 5) & 0x7);
-	      printf("Voltage config: %d\n", (mode >> 2) & 0x7);
-	      printf("State: %d\n", (int)data[2]); //7=good, 18= 1 minute to off
-
-              double input_voltage = (double)data[3] * 0.1558f;
-              double ignition_voltage = (double)data[4] * 0.1558f;
-              double output_voltage = (double)data[5] * 0.1170f;
-
-	      printf("Input voltage: %f\n", input_voltage);
-	      printf("Ignition voltage: %f\n", ignition_voltage);
-	      printf("Output voltage: %f\n", output_voltage);
-
-              int status = data[6];
-
-	      int power_switch = (status & 0x4);
-	      int output_enable = (status & 0x8);
-	      int auxvin_enable = (status & 0x10);
-
-	      printf("Power switch: %d\n", power_switch);
-	      printf("Output enable: %d\n", output_enable);
-	      printf("Aux V in enable: %d\n", auxvin_enable);	      
-      } else {
-	      errx(1,"weird packet: %d", data[0]);
-      }
-
-      return DCDC_SUCCESS;
-}
-
 // Does some mysterious conversions (for voltage in, for example).
-uint8_t convert_data(double x) {
+uint8_t convert_data(double x)
+{
 	double rpot = (double)0.8 * CT_R1 / (x - (double)0.8) - CT_R2;
 	double result = (257 * (rpot-CT_RW) / CT_RP);
 
@@ -323,7 +192,8 @@ uint8_t convert_data(double x) {
 }
 
 // TODO This is not throughoutly tested! Beware of hardware roasting!
-int dcdc_set_voltage(struct dcdc_cfg *cfg, double vout) {
+int dcdc_set_voltage(struct dcdc_cfg *cfg, double vout)
+{
 	uint8_t vout_raw = convert_data(vout);
 
 	if (cfg->debug) warnx("Setting voltage byte to %d",vout_raw);
@@ -331,32 +201,4 @@ int dcdc_set_voltage(struct dcdc_cfg *cfg, double vout) {
 	int ret = send_command(cfg, CMD_WRITE_VOUT, vout_raw);
 	if (ret < 0) printf("raw error: %d\n",ret);
 	return DCDC_SUCCESS;
-}
-
-
-int main(int argc, char **argv) {
-
-	struct dcdc_cfg cfg;
-	int ret = dcdc_init(&cfg, 1);
-
-	if (ret!=DCDC_SUCCESS) {
-		printf("hajosi");
-		return 1;
-	}
-	
-	// Experimental voltage selection if given from cmd line.
-	if (argc==2) {
-		double vout;
-		if (sscanf(argv[1], "%lf", &vout) == 1) {
-			printf("Setting voltage to %f volts.\n", vout);
-			dcdc_set_voltage(&cfg,vout);
-		} else {
-			warnx("Invalid voltage");
-		}
-	}
-
-	dcdc_debugdump(&cfg);
-
-	dcdc_stop(&cfg);
-	return 0;
 }

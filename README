@@ -15,20 +15,31 @@ License
 
 GNU GPL version 2 or (at your option) later. COPYING missing at the moment. :-)
 
+Requirements:
+-------------
+
+- Linux 2.6
+- gcc (build time)
+- scons (build time)
+
 Usage
 -----
 
-$ ./make.sh
-$ sudo ./a.out
+To compile, type 'scons'. If command is not found, please install
+package 'scons' with apt-get or similar package tool first.
+
+To get some information:
+
+$ sudo ./debugtool
 
 To set output voltage (VOUT):
 
-$ sudo ./a.out 13.5
+$ sudo ./debugtool 13.5
 
 TODO
 ----
 
-A working tool. This is a piece of crappiness.
+A polished and elegant tool. This is a piece of crappiness.
 
 Thanks
 ------
