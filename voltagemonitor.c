@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <usb.h>
 #include <math.h>
+#include <err.h>
 #include <sys/time.h>
 
 #include "usbtools.h"
@@ -12,7 +13,7 @@ long long get_microsecs() {
 	struct timeval tv;
 
 	if (gettimeofday(&tv, NULL))
-		err("Error while accessing system time");
+		err(3,"Error while accessing system time");
 	
 	return (long long)tv.tv_sec * 1e6 + tv.tv_usec;
 }
@@ -56,6 +57,7 @@ int main(int argc, char **argv)
 	if (argc > 2) {
 		errx(1,"Too many arguments. Usage: %s [interval]", argv[0]);
 	} else if (argc == 2) {
+		// FIXME use strtod instead of sscanf!
 		if (sscanf(argv[1], "%lf", &interval_user) != 1)
 			errx(2,"Invalid interval. Not a number!");
 	}
@@ -78,13 +80,16 @@ int main(int argc, char **argv)
 		long long before_sleep = get_microsecs();
 		long long wait = interval - (before_sleep % interval);
 		
-		if (usleep(wait))
-			err("Failed to wait.");
+		if (usleep(wait)) err(3,"Failed to wait.");
 
 		long long after_sleep = get_microsecs();
 		double vin = dcdc_get_voltage(&cfg);
 		
 		printf("%lld,%lf\n",after_sleep, vin);
+		
+		// Flush to file (or screen)
+		if (fflush(stdout)) err(3,"Output handling failed");
+			
 	}
 
 	dcdc_stop(&cfg);
